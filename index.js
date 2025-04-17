@@ -328,32 +328,45 @@ async function run() {
     // Backend: Trending skills API
     app.get("/trending-skills", async (req, res) => {
       try {
-        const pipeline = [
-          {
-            $group: {
-              _id: "$category",
-              count: { $sum: 1 },
+        const result = await skillsCollection
+          .aggregate([
+            {
+              $group: {
+                _id: "$category", // Group by category
+                totalRequests: {
+                  $sum: {
+                    $cond: [{ $eq: ["$type", "request"] }, 1, 0], // Count only "request" type
+                  },
+                },
+                totalOffers: {
+                  $sum: {
+                    $cond: [{ $eq: ["$type", "offer"] }, 1, 0], // Count only "offer" type
+                  },
+                },
+                skills: { $push: "$$ROOT" }, // Include all skills in the category
+              },
             },
-          },
-          { $sort: { count: -1 } },
-          { $limit: 5 },
-          {
-            $project: {
-              category: "$_id",
-              count: 1,
-              _id: 0,
+            {
+              $addFields: {
+                totalSkills: { $add: ["$totalRequests", "$totalOffers"] }, // Calculate total skills (requests + offers)
+              },
             },
-          },
-        ];
+            {
+              $sort: { totalSkills: -1 }, // Sort by totalSkills in descending order
+            },
+            {
+              $limit: 10, // Limit to top 10 categories
+            },
+          ])
+          .toArray();
 
-        const result = await skillsCollection.aggregate(pipeline).toArray();
         res.send(result);
       } catch (error) {
         console.error("Error fetching trending skills:", error);
         res.status(500).send({ message: "Failed to fetch trending skills" });
       }
     });
-
+    
     //-----------trending skills and about us apis ends here-----------
 
     //---------------users related apis are below-------------------------
